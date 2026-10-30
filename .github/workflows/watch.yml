@@ -1,0 +1,45 @@
+name: Plaza watcher
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # every 10 minutes (GitHub may start it a few minutes late)
+  workflow_dispatch:
+    inputs:
+      test_alarm:
+        description: "Send a test alarm to my phone"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # lets the job save which listings it has already seen
+
+concurrency:
+  group: plaza-watcher
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check Plaza for new listings
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          CALLMEBOT_USER: ${{ secrets.CALLMEBOT_USER }}
+          CITIES: ${{ vars.CITIES }}
+          MAX_RENT: ${{ vars.MAX_RENT }}
+          TEST_ALARM: ${{ github.event.inputs.test_alarm == 'true' && '1' || '' }}
+        run: python plaza_watch.py
+
+      - name: Remember seen listings
+        run: |
+          git config user.name "plaza-watcher"
+          git config user.email "plaza-watcher@users.noreply.github.com"
+          git add seen.json 2>/dev/null || true
+          git diff --cached --quiet || (git commit -m "Update seen listings" && git push)
