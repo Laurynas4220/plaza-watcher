@@ -89,9 +89,25 @@ def ntfy(topic, title, message, url=None):
     urllib.request.urlopen(req, timeout=20).read()
 
 
-def telegram_call(user, text):
-    q = urllib.parse.urlencode({"user": user, "text": text, "lang": "en-GB-Standard-B", "rpt": "2"})
-    urllib.request.urlopen(f"https://api.callmebot.com/start.php?{q}", timeout=60).read()
+def telegram_call(user, text, attempts=3, wait=25):
+    """Place a Telegram voice call via CallMeBot, retrying when their free
+    service is busy (FLOOD) or another error comes back."""
+    import time
+    q = urllib.parse.urlencode({"user": user, "text": text[:250], "lang": "en-GB-Standard-B", "rpt": "3"})
+    for n in range(1, attempts + 1):
+        try:
+            body = urllib.request.urlopen(f"https://api.callmebot.com/start.php?{q}", timeout=70).read()
+            body = body.decode("utf-8", "replace")
+        except Exception as e:
+            body = f"Error: {e}"
+        failed = "error" in body.lower() or "flood" in body.lower()
+        print(f"Telegram call attempt {n}: {'FAILED' if failed else 'OK'}")
+        if not failed:
+            return
+        print("  CallMeBot said:", " ".join(body.split())[-200:])
+        if n < attempts:
+            time.sleep(wait)
+    print("Telegram call gave up after", attempts, "attempts")
 
 
 def alarm(title, message, url=None):
